@@ -8,5 +8,5 @@ VPS-Knock-Open = type=generic,timeout=10,script-path=https://raw.githubuserconte
 VPS-Knock-Close = type=generic,timeout=10,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=close&name={{{vps_name}}}&host={{{vps_host}}}&ports={{{close_ports}}}"
 
 [Panel]
-VPS-Knock-Open = title="{{{vps_name}}}Open",content="Tap refresh to send the open sequence.",icon=xserve,script-name=VPS-Knock-Open
-VPS-Knock-Close = title="{{{vps_name}}}Close",content="Tap refresh to send the close sequence.",icon=xserve,script-name=VPS-Knock-Close
+VPS-Knock-Open = title="{{{vps_name}}} Knock Open",content="Target: {{{vps_host}}}\nSequence: {{{open_ports}}}",icon=xserve,script-name=VPS-Knock-Open
+VPS-Knock-Close = title="{{{vps_name}}} Knock Close",content="Target: {{{vps_host}}}\nSequence: {{{close_ports}}}",icon=xserve,script-name=VPS-Knock-Close

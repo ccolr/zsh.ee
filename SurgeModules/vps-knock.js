@@ -103,7 +103,7 @@
     const action = args.action;
     const configuredName = String(args.name || "").trim() || String(args.host || "").trim() || "VPS";
     const actionLabel = action === "open" ? "Open" : "Close";
-    const panelTitle = configuredName + actionLabel;
+    const panelTitle = configuredName + " Knock " + actionLabel;
 
     if (typeof $trigger === "string" && $trigger === "auto-interval") {
         finish(panelTitle, "Automatic refresh is disabled. Run this action manually.", "alert");
@@ -151,9 +151,10 @@
 
     setTimeout(function () {
         finish(
-            name + actionLabel,
+            name + " Knock " + actionLabel,
             [
-                actionLabel + " sequence sent: " + ports.join(" → "),
+                "Target: " + host,
+                "Sequence: " + ports.join(" → "),
                 "Please manually verify the actual connectivity status."
             ].join("\n"),
             "good"
