@@ -1,17 +1,12 @@
-// Surge generic script: 独立控制一台 VPS，操作前后探测，敲门由短生命周期子会话发送。
+// Surge generic script: 向一台 VPS 连续发送一组 knockd 端口序列。
 
 (function () {
     "use strict";
 
     const KNOCK_REQUEST_TIMEOUT_SECONDS = 1;
     const KNOCK_GAP_MILLISECONDS = 100;
-    const KNOCK_FINISH_GRACE_MILLISECONDS = 250;
+    const FINISH_GRACE_MILLISECONDS = 250;
     const MAX_KNOCK_PORTS = 5;
-    const PROBE_TIMEOUT_SECONDS = 3;
-    const POST_OPEN_SETTLE_MILLISECONDS = 500;
-    const POST_CLOSE_SETTLE_MILLISECONDS = 1500;
-    const PROBE_RETRY_DELAY_MILLISECONDS = 1000;
-    const POST_KNOCK_PROBE_ATTEMPTS = 3;
     let completed = false;
 
     function finish(title, content, style) {
@@ -50,42 +45,30 @@
         return result;
     }
 
-    function splitList(value) {
-        if (typeof value !== "string") return [];
-        return value
+    function parsePorts(value) {
+        const values = String(value || "")
             .split(/[|,]/)
             .map(function (item) { return item.trim(); })
             .filter(function (item) { return item.length > 0; });
-    }
 
-    function parsePorts(value, label) {
-        const values = splitList(value);
         if (values.length === 0) {
-            throw new Error(label + "不能为空");
+            throw new Error("敲门序列不能为空");
         }
         if (values.length > MAX_KNOCK_PORTS) {
-            throw new Error(label + "最多支持 " + MAX_KNOCK_PORTS + " 个端口");
+            throw new Error("敲门序列最多支持 " + MAX_KNOCK_PORTS + " 个端口");
         }
 
         return values.map(function (value) {
             if (!/^\d+$/.test(value)) {
-                throw new Error(label + "包含非整数端口: " + value);
+                throw new Error("敲门序列包含非整数端口: " + value);
             }
 
             const port = Number(value);
             if (!Number.isInteger(port) || port < 1 || port > 65535) {
-                throw new Error(label + "端口超出 1-65535: " + value);
+                throw new Error("敲门端口超出 1-65535: " + value);
             }
             return port;
         });
-    }
-
-    function parseCheckPort(value) {
-        const ports = parsePorts(value || "80", "检测端口");
-        if (ports.length !== 1 || (ports[0] !== 80 && ports[0] !== 443)) {
-            throw new Error("检测端口只能填写 80 或 443");
-        }
-        return ports[0];
     }
 
     function normalizeHost(value) {
@@ -116,61 +99,27 @@
         return host;
     }
 
-    function currentNetworkLabel() {
-        if (typeof $network !== "object" || !$network) return "当前网络";
-        if ($network.wifi && $network.wifi.ssid) {
-            return "Wi-Fi: " + $network.wifi.ssid;
-        }
-        if ($network.v4 && $network.v4.primaryInterface) {
-            return "网络接口: " + $network.v4.primaryInterface;
-        }
-        return "当前网络";
-    }
-
-    function errorText(error) {
-        if (!error) return "未收到有效 HTTP 响应";
-        const text = String(error).replace(/\s+/g, " ").trim();
-        return text.length > 100 ? text.slice(0, 100) + "…" : text;
-    }
-
     const args = parseArguments(typeof $argument === "string" ? $argument : "");
     const action = args.action;
 
     if (typeof $trigger === "string" && $trigger === "auto-interval") {
-        finish(
-            "VPS Knockd：已阻止自动执行",
-            "敲门操作只能手动触发。",
-            "alert"
-        );
+        finish("VPS Knockd：已阻止自动执行", "敲门操作只能手动触发。", "alert");
         return;
     }
 
     if (action !== "open" && action !== "close") {
-        finish(
-            "VPS Knockd：配置错误",
-            "action 必须明确设置为 open 或 close。",
-            "error"
-        );
+        finish("VPS Knockd：配置错误", "action 必须明确设置为 open 或 close。", "error");
         return;
     }
 
-    let target;
-    let targetPorts;
-    let checkPort;
+    let host;
+    let ports;
+    let name;
 
     try {
-        const openPorts = parsePorts(args.open, "开门端口");
-        const closePorts = parsePorts(args.close, "关门端口");
-        checkPort = parseCheckPort(args.check_port);
-        if (openPorts.indexOf(checkPort) >= 0 || closePorts.indexOf(checkPort) >= 0) {
-            throw new Error("检测端口不能同时出现在敲门序列中: " + checkPort);
-        }
-
-        target = {
-            name: String(args.name || "").trim() || String(args.host || "").trim(),
-            host: normalizeHost(args.host)
-        };
-        targetPorts = action === "open" ? openPorts : closePorts;
+        host = normalizeHost(args.host);
+        ports = parsePorts(args.ports);
+        name = String(args.name || "").trim() || host;
     } catch (error) {
         finish("VPS Knockd：配置错误", error.message, "error");
         return;
@@ -178,174 +127,36 @@
 
     const actionLabel = action === "open" ? "开门" : "关门";
 
-    function checkUrl() {
-        const scheme = checkPort === 443 ? "https" : "http";
-        return scheme + "://" + target.host + ":" + checkPort + "/?_surge_knock=" + Date.now();
-    }
-
-    function probe(isPostKnock, callback) {
-        const startedAt = Date.now();
-        const url = checkUrl();
-        console.log("[vps-knock] DIRECT 检测 " + target.name + " " + url);
-
-        try {
-            const requestOptions = {
-                url: url,
-                timeout: PROBE_TIMEOUT_SECONDS,
-                headers: checkPort === 80
-                    ? {"Cache-Control": "no-cache", "Connection": "close"}
-                    : {"Cache-Control": "no-cache"},
-                "auto-redirect": false,
-                "auto-cookie": false
-            };
-            if (isPostKnock) {
-                // 使用独立的临时 DIRECT 策略，避免复用操作前探测建立的连接。
-                requestOptions["policy-descriptor"] = "direct";
-            } else {
-                requestOptions.policy = "DIRECT";
-            }
-
-            $httpClient.head(requestOptions, function (error, response) {
-                const status = response && Number(response.status);
-                const reachable = !error && Number.isFinite(status) && status >= 100 && status <= 599;
-                callback({
-                    reachable: reachable,
-                    status: status,
-                    error: error,
-                    elapsed: Date.now() - startedAt
-                });
-            });
-        } catch (error) {
-            callback({
-                reachable: false,
-                status: null,
-                error: error.message,
-                elapsed: Date.now() - startedAt
-            });
-        }
-    }
-
-    function senderScript() {
-        const hostLiteral = JSON.stringify(target.host);
-        const portsLiteral = JSON.stringify(targetPorts);
-        const timeoutLiteral = JSON.stringify(KNOCK_REQUEST_TIMEOUT_SECONDS);
-        const gapLiteral = JSON.stringify(KNOCK_GAP_MILLISECONDS);
-        const graceLiteral = JSON.stringify(KNOCK_FINISH_GRACE_MILLISECONDS);
-
-        return [
-            "(function(){\"use strict\";",
-            "const host=" + hostLiteral + ";",
-            "const ports=" + portsLiteral + ";",
-            "const gap=" + gapLiteral + ";",
-            "ports.forEach(function(port,index){",
-            "setTimeout(function(){",
-            "$httpClient.head({url:\"http://\"+host+\":\"+port+\"/\",timeout:" + timeoutLiteral + ",policy:\"DIRECT\",\"auto-redirect\":false,\"auto-cookie\":false},function(){});",
-            "},index*gap);",
-            "});",
-            "setTimeout(function(){$done();},(ports.length-1)*gap+" + graceLiteral + ");",
-            "})();"
-        ].join("");
-    }
-
-    function sendSequence(callback) {
-        const childTimeoutSeconds = 2;
-        console.log(
-            "[vps-knock] 独立发送 " + actionLabel + " " + target.name + " " +
-            targetPorts.join(" → ")
-        );
-
-        try {
-            $httpAPI(
-                "POST",
-                "/v1/scripting/evaluate",
-                {
-                    script_text: senderScript(),
-                    mock_type: "cron",
-                    timeout: childTimeoutSeconds
-                },
-                function (result) {
-                    callback(result);
-                }
+    ports.forEach(function (port, index) {
+        setTimeout(function () {
+            console.log(
+                "[vps-knock] " + name + " " + actionLabel +
+                " " + (index + 1) + "/" + ports.length + ": " + port
             );
-        } catch (error) {
-            console.log("[vps-knock] 无法启动独立发送会话: " + error.message);
-            callback({error: error.message});
-        }
-    }
 
-    function verifyAfterKnock(expectedReachable, attempt, callback) {
-        probe(true, function (result) {
-            if (result.reachable === expectedReachable) {
-                callback(true, result, attempt + 1);
-                return;
+            try {
+                $httpClient.head({
+                    url: "http://" + host + ":" + port + "/",
+                    timeout: KNOCK_REQUEST_TIMEOUT_SECONDS,
+                    policy: "DIRECT",
+                    "auto-redirect": false,
+                    "auto-cookie": false
+                }, function () {});
+            } catch (error) {
+                console.log("[vps-knock] 端口 " + port + " 请求启动失败: " + error.message);
             }
-
-            if (attempt + 1 >= POST_KNOCK_PROBE_ATTEMPTS) {
-                callback(false, result, attempt + 1);
-                return;
-            }
-
-            setTimeout(function () {
-                verifyAfterKnock(expectedReachable, attempt + 1, callback);
-            }, PROBE_RETRY_DELAY_MILLISECONDS);
-        });
-    }
-
-    function finishAlready(result) {
-        const stateText = action === "open"
-            ? "已经是开门状态，未重复发送敲门序列。"
-            : "已经是关门状态，未重复发送关门序列。";
-        finish(
-            target.name + " 无需重复" + actionLabel,
-            [
-                currentNetworkLabel(),
-                "目标: " + target.name + "（" + target.host + "）",
-                stateText,
-                action === "open"
-                    ? "检测结果: HTTP " + result.status
-                    : "检测结果: " + errorText(result.error)
-            ].join("\n"),
-            "good"
-        );
-    }
-
-    function finishVerified(verified, result, attempts) {
-        const successText = action === "open"
-            ? "开门成功，检测端口已经可以直连。"
-            : "关门成功，检测端口已经无法直连。";
-        const failureText = action === "open"
-            ? "开门序列已发送，但检测端口仍无法直连。"
-            : "关门序列已发送，但检测端口仍可直连。";
-        const probeText = result.reachable
-            ? "HTTP " + result.status
-            : errorText(result.error);
-
-        finish(
-            target.name + " " + (verified ? actionLabel + "成功" : actionLabel + "未确认"),
-            [
-                currentNetworkLabel(),
-                "目标: " + target.name + "（" + target.host + "）",
-                verified ? successText : failureText,
-                "操作后检测: " + probeText + "（" + attempts + " 次）"
-            ].join("\n"),
-            verified ? "good" : "alert"
-        );
-    }
-
-    probe(false, function (before) {
-        const alreadyDesired = action === "open" ? before.reachable : !before.reachable;
-        if (alreadyDesired) {
-            finishAlready(before);
-            return;
-        }
-
-        sendSequence(function () {
-            const settleDelay = action === "open"
-                ? POST_OPEN_SETTLE_MILLISECONDS
-                : POST_CLOSE_SETTLE_MILLISECONDS;
-            setTimeout(function () {
-                verifyAfterKnock(action === "open", 0, finishVerified);
-            }, settleDelay);
-        });
+        }, index * KNOCK_GAP_MILLISECONDS);
     });
+
+    setTimeout(function () {
+        finish(
+            name + " " + actionLabel + "序列已发送",
+            [
+                "目标: " + host,
+                "序列: " + ports.join(" → "),
+                "脚本不再自动探测，请手动验证实际通断状态。"
+            ].join("\n"),
+            "info"
+        );
+    }, (ports.length - 1) * KNOCK_GAP_MILLISECONDS + FINISH_GRACE_MILLISECONDS);
 })();
