@@ -8,7 +8,8 @@
     const KNOCK_FINISH_GRACE_MILLISECONDS = 250;
     const MAX_KNOCK_PORTS = 5;
     const PROBE_TIMEOUT_SECONDS = 3;
-    const POST_KNOCK_SETTLE_MILLISECONDS = 500;
+    const POST_OPEN_SETTLE_MILLISECONDS = 500;
+    const POST_CLOSE_SETTLE_MILLISECONDS = 1500;
     const PROBE_RETRY_DELAY_MILLISECONDS = 1000;
     const POST_KNOCK_PROBE_ATTEMPTS = 3;
     let completed = false;
@@ -182,22 +183,29 @@
         return scheme + "://" + target.host + ":" + checkPort + "/?_surge_knock=" + Date.now();
     }
 
-    function probe(callback) {
+    function probe(isPostKnock, callback) {
         const startedAt = Date.now();
         const url = checkUrl();
         console.log("[vps-knock] DIRECT 检测 " + target.name + " " + url);
 
         try {
-            $httpClient.head({
+            const requestOptions = {
                 url: url,
                 timeout: PROBE_TIMEOUT_SECONDS,
-                policy: "DIRECT",
                 headers: checkPort === 80
                     ? {"Cache-Control": "no-cache", "Connection": "close"}
                     : {"Cache-Control": "no-cache"},
                 "auto-redirect": false,
                 "auto-cookie": false
-            }, function (error, response) {
+            };
+            if (isPostKnock) {
+                // 使用独立的临时 DIRECT 策略，避免复用操作前探测建立的连接。
+                requestOptions["policy-descriptor"] = "direct";
+            } else {
+                requestOptions.policy = "DIRECT";
+            }
+
+            $httpClient.head(requestOptions, function (error, response) {
                 const status = response && Number(response.status);
                 const reachable = !error && Number.isFinite(status) && status >= 100 && status <= 599;
                 callback({
@@ -266,7 +274,7 @@
     }
 
     function verifyAfterKnock(expectedReachable, attempt, callback) {
-        probe(function (result) {
+        probe(true, function (result) {
             if (result.reachable === expectedReachable) {
                 callback(true, result, attempt + 1);
                 return;
@@ -324,7 +332,7 @@
         );
     }
 
-    probe(function (before) {
+    probe(false, function (before) {
         const alreadyDesired = action === "open" ? before.reachable : !before.reachable;
         if (alreadyDesired) {
             finishAlready(before);
@@ -332,9 +340,12 @@
         }
 
         sendSequence(function () {
+            const settleDelay = action === "open"
+                ? POST_OPEN_SETTLE_MILLISECONDS
+                : POST_CLOSE_SETTLE_MILLISECONDS;
             setTimeout(function () {
                 verifyAfterKnock(action === "open", 0, finishVerified);
-            }, POST_KNOCK_SETTLE_MILLISECONDS);
+            }, settleDelay);
         });
     });
 })();
