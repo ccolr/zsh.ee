@@ -192,6 +192,9 @@
                 url: url,
                 timeout: PROBE_TIMEOUT_SECONDS,
                 policy: "DIRECT",
+                headers: checkPort === 80
+                    ? {"Cache-Control": "no-cache", "Connection": "close"}
+                    : {"Cache-Control": "no-cache"},
                 "auto-redirect": false,
                 "auto-cookie": false
             }, function (error, response) {
