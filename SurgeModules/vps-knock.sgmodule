@@ -1,12 +1,12 @@
-#!name=VPS Knockd 独立控制
-#!desc=单台 VPS 的手动开门、关门控制。点击卡片只发送对应 knockd 序列，不自动探测或判断结果。
+#!name=VPS Knockd Manual Control
+#!desc=Manual open and close controls for one VPS. Each panel sends only its corresponding knockd sequence.
 #!arguments=vps_name:VPS-1,vps_host:vps1.example.com,open_ports:7123|8234|9345,close_ports:9345|8234|7123
-#!arguments-desc=配置 VPS 名称、地址、开门序列和关门序列。序列使用竖线 | 分隔且最多 5 个端口。
+#!arguments-desc=Configure the VPS name, address, open sequence, and close sequence. Separate ports with | and use no more than 5 ports per sequence.
 
 [Script]
 VPS-Knock-Open = type=generic,timeout=10,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=open&name={{{vps_name}}}&host={{{vps_host}}}&ports={{{open_ports}}}"
 VPS-Knock-Close = type=generic,timeout=10,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=close&name={{{vps_name}}}&host={{{vps_host}}}&ports={{{close_ports}}}"
 
 [Panel]
-VPS-Knock-Open = title="🔓 {{{vps_name}}} 开门",content="点击刷新：发送开门序列，结果请手动验证",style=info,script-name=VPS-Knock-Open
-VPS-Knock-Close = title="🔒 {{{vps_name}}} 关门",content="点击刷新：发送关门序列，结果请手动验证",style=info,script-name=VPS-Knock-Close
+VPS-Knock-Open = title="{{{vps_name}}}Open",content="Tap refresh to send the open sequence.",icon=xserve,script-name=VPS-Knock-Open
+VPS-Knock-Close = title="{{{vps_name}}}Close",content="Tap refresh to send the close sequence.",icon=xserve,script-name=VPS-Knock-Close

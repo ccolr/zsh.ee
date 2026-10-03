@@ -1,4 +1,4 @@
-// Surge generic script: 向一台 VPS 连续发送一组 knockd 端口序列。
+// Surge generic script: sends one knockd port sequence to one VPS.
 
 (function () {
     "use strict";
@@ -52,20 +52,20 @@
             .filter(function (item) { return item.length > 0; });
 
         if (values.length === 0) {
-            throw new Error("敲门序列不能为空");
+            throw new Error("The knock sequence cannot be empty.");
         }
         if (values.length > MAX_KNOCK_PORTS) {
-            throw new Error("敲门序列最多支持 " + MAX_KNOCK_PORTS + " 个端口");
+            throw new Error("The knock sequence supports up to " + MAX_KNOCK_PORTS + " ports.");
         }
 
         return values.map(function (value) {
             if (!/^\d+$/.test(value)) {
-                throw new Error("敲门序列包含非整数端口: " + value);
+                throw new Error("The knock sequence contains an invalid port: " + value);
             }
 
             const port = Number(value);
             if (!Number.isInteger(port) || port < 1 || port > 65535) {
-                throw new Error("敲门端口超出 1-65535: " + value);
+                throw new Error("The knock port is outside 1-65535: " + value);
             }
             return port;
         });
@@ -74,25 +74,25 @@
     function normalizeHost(value) {
         const host = String(value || "").trim();
         if (host.length === 0) {
-            throw new Error("VPS 地址不能为空");
+            throw new Error("The VPS address cannot be empty.");
         }
         if (/^https?:\/\//i.test(host) || /[\/?#@\s]/.test(host)) {
-            throw new Error("VPS 地址不能包含协议、路径、凭据或空格: " + host);
+            throw new Error("The VPS address cannot contain a scheme, path, credentials, or spaces: " + host);
         }
         if (host.indexOf("[") >= 0 || host.indexOf("]") >= 0) {
             if (/^\[[0-9a-fA-F:.]+\]$/.test(host)) {
                 return host;
             }
-            throw new Error("IPv6 地址格式错误: " + host);
+            throw new Error("Invalid IPv6 address: " + host);
         }
 
         const colonCount = (host.match(/:/g) || []).length;
         if (colonCount === 1) {
-            throw new Error("VPS 地址不能包含端口: " + host);
+            throw new Error("The VPS address cannot include a port: " + host);
         }
         if (colonCount > 1) {
             if (!/^[0-9a-fA-F:.]+$/.test(host)) {
-                throw new Error("IPv6 地址格式错误: " + host);
+                throw new Error("Invalid IPv6 address: " + host);
             }
             return "[" + host + "]";
         }
@@ -101,14 +101,17 @@
 
     const args = parseArguments(typeof $argument === "string" ? $argument : "");
     const action = args.action;
+    const configuredName = String(args.name || "").trim() || String(args.host || "").trim() || "VPS";
+    const actionLabel = action === "open" ? "Open" : "Close";
+    const panelTitle = configuredName + actionLabel;
 
     if (typeof $trigger === "string" && $trigger === "auto-interval") {
-        finish("VPS Knockd：已阻止自动执行", "敲门操作只能手动触发。", "alert");
+        finish(panelTitle, "Automatic refresh is disabled. Run this action manually.", "alert");
         return;
     }
 
     if (action !== "open" && action !== "close") {
-        finish("VPS Knockd：配置错误", "action 必须明确设置为 open 或 close。", "error");
+        finish("VPS Knockd", "Configuration error: action must be open or close.", "error");
         return;
     }
 
@@ -121,11 +124,9 @@
         ports = parsePorts(args.ports);
         name = String(args.name || "").trim() || host;
     } catch (error) {
-        finish("VPS Knockd：配置错误", error.message, "error");
+        finish(panelTitle, "Configuration error: " + error.message, "error");
         return;
     }
-
-    const actionLabel = action === "open" ? "开门" : "关门";
 
     ports.forEach(function (port, index) {
         setTimeout(function () {
@@ -143,20 +144,19 @@
                     "auto-cookie": false
                 }, function () {});
             } catch (error) {
-                console.log("[vps-knock] 端口 " + port + " 请求启动失败: " + error.message);
+                console.log("[vps-knock] Failed to start the request for port " + port + ": " + error.message);
             }
         }, index * KNOCK_GAP_MILLISECONDS);
     });
 
     setTimeout(function () {
         finish(
-            name + " " + actionLabel + "序列已发送",
+            name + actionLabel,
             [
-                "目标: " + host,
-                "序列: " + ports.join(" → "),
-                "脚本不再自动探测，请手动验证实际通断状态。"
+                actionLabel + " sequence sent: " + ports.join(" → "),
+                "Please manually verify the actual connectivity status."
             ].join("\n"),
-            "info"
+            "good"
         );
     }, (ports.length - 1) * KNOCK_GAP_MILLISECONDS + FINISH_GRACE_MILLISECONDS);
 })();
