@@ -1,15 +1,15 @@
-// Surge generic script: DIRECT 检测受保护的 nginx，按需发送 knockd 序列，再次验证。
+// Surge generic script: DIRECT 检测受保护的 nginx，按需发送 knockd 序列，下次运行时验证。
 
 (function () {
     "use strict";
 
-    // 必须短于常见的首次 TCP SYN 重传窗口，避免同一敲门端口被重复命中。
-    const KNOCK_REQUEST_TIMEOUT_SECONDS = 0.2;
+    // $httpClient 只能发 HTTP 请求，不能保证 timeout 会立刻销毁底层 TCP。
+    // 所有敲门请求必须在首次 SYN 重传前排入网络栈，并尽快结束脚本会话。
+    const KNOCK_REQUEST_TIMEOUT_SECONDS = 1;
     const KNOCK_GAP_MILLISECONDS = 100;
+    const KNOCK_FINISH_GRACE_MILLISECONDS = 250;
+    const MAX_KNOCK_PORTS = 5;
     const PROBE_TIMEOUT_SECONDS = 3;
-    const POST_KNOCK_SETTLE_MILLISECONDS = 500;
-    const PROBE_RETRY_DELAY_MILLISECONDS = 1000;
-    const POST_KNOCK_PROBE_ATTEMPTS = 3;
     let completed = false;
 
     function finish(title, content, style) {
@@ -163,6 +163,9 @@
 
         const openPorts = parsePorts(args.open, "开门端口");
         const closePorts = parsePorts(args.close, "关门端口");
+        if (openPorts.length > MAX_KNOCK_PORTS || closePorts.length > MAX_KNOCK_PORTS) {
+            throw new Error("每组敲门序列最多支持 " + MAX_KNOCK_PORTS + " 个端口");
+        }
         targetPorts = action === "open" ? openPorts : closePorts;
         checkPort = parseCheckPort(args.check_port || "80");
         if (openPorts.indexOf(checkPort) >= 0 || closePorts.indexOf(checkPort) >= 0) {
@@ -226,27 +229,13 @@
         }
     }
 
-    function knock(target, portIndex, callback) {
-        if (portIndex >= targetPorts.length) {
-            callback();
-            return;
-        }
-
+    function sendKnock(target, portIndex) {
         const port = targetPorts[portIndex];
         const url = "http://" + target.host + ":" + port + "/";
         console.log(
             "[vps-knock] " + actionLabel + " " + target.name + " " + target.host + ":" + port +
             " (" + (portIndex + 1) + "/" + targetPorts.length + ")"
         );
-
-        function continueSequence(error) {
-            if (error) {
-                console.log("[vps-knock] 敲门请求结束: " + error);
-            }
-            setTimeout(function () {
-                knock(target, portIndex + 1, callback);
-            }, KNOCK_GAP_MILLISECONDS);
-        }
 
         try {
             $httpClient.head({
@@ -256,35 +245,47 @@
                 "auto-redirect": false,
                 "auto-cookie": false
             }, function (error) {
-                continueSequence(error);
+                if (error) {
+                    console.log("[vps-knock] 敲门请求结束: " + error);
+                }
             });
         } catch (error) {
             console.log("[vps-knock] 无法发起敲门请求: " + error.message);
-            continueSequence(error.message);
         }
     }
 
-    function verifyAfterKnock(target, expectedReachable, attempt, callback) {
-        probe(target, function (result) {
-            if (result.reachable === expectedReachable) {
-                callback(true, result, attempt + 1);
-                return;
-            }
-
-            if (attempt + 1 >= POST_KNOCK_PROBE_ATTEMPTS) {
-                callback(false, result, attempt + 1);
-                return;
-            }
-
-            setTimeout(function () {
-                verifyAfterKnock(target, expectedReachable, attempt + 1, callback);
-            }, PROBE_RETRY_DELAY_MILLISECONDS);
+    function knockTargets(pendingTargets, callback) {
+        pendingTargets.forEach(function (target) {
+            targetPorts.forEach(function (_, portIndex) {
+                const delay = portIndex * KNOCK_GAP_MILLISECONDS;
+                setTimeout(function () {
+                    sendKnock(target, portIndex);
+                }, delay);
+            });
         });
+
+        const lastKnockDelay = (targetPorts.length - 1) * KNOCK_GAP_MILLISECONDS;
+        setTimeout(function () {
+            callback();
+        }, lastKnockDelay + KNOCK_FINISH_GRACE_MILLISECONDS);
     }
 
-    function processTarget(index) {
+    function probeTargets(index, pendingTargets) {
         if (index >= targets.length) {
-            finishSummary();
+            if (pendingTargets.length === 0) {
+                finishSummary();
+                return;
+            }
+
+            knockTargets(pendingTargets, function () {
+                pendingTargets.forEach(function (target) {
+                    results.push({
+                        target: target,
+                        state: action === "open" ? "open-sent" : "close-sent"
+                    });
+                });
+                finishSummary();
+            });
             return;
         }
 
@@ -296,35 +297,19 @@
                     state: "already-connected",
                     probe: before
                 });
-                processTarget(index + 1);
-                return;
-            }
-
-            if (action === "close" && !before.reachable) {
+            } else if (action === "close" && !before.reachable) {
                 results.push({
                     target: target,
                     state: "already-unreachable",
                     probe: before
                 });
-                processTarget(index + 1);
-                return;
+            } else {
+                pendingTargets.push(target);
             }
 
-            knock(target, 0, function () {
-                setTimeout(function () {
-                    verifyAfterKnock(target, action === "open", 0, function (verified, after, attempts) {
-                        results.push({
-                            target: target,
-                            state: action === "open"
-                                ? (verified ? "opened" : "open-unverified")
-                                : (verified ? "closed" : "close-unverified"),
-                            probe: after,
-                            attempts: attempts
-                        });
-                        processTarget(index + 1);
-                    });
-                }, POST_KNOCK_SETTLE_MILLISECONDS);
-            });
+            setTimeout(function () {
+                probeTargets(index + 1, pendingTargets);
+            }, 0);
         });
     }
 
@@ -334,52 +319,47 @@
         switch (result.state) {
             case "already-connected":
                 return "✅ " + name + "：已经连通，请勿重复敲门";
-            case "opened":
-                return "✅ " + name + "：敲门成功，nginx 已直连";
-            case "open-unverified":
-                return "⚠️ " + name + "：敲门后仍未连通；" + errorText(result.probe.error);
+            case "open-sent":
+                return "📤 " + name + "：开门序列已发送";
             case "already-unreachable":
                 return "ℹ️ " + name + "：当前 nginx 未连通或检测失败，无需重复关门";
-            case "closed":
-                return "✅ " + name + "：关门成功，nginx 已无法直连";
-            case "close-unverified":
-                return "⚠️ " + name + "：关门序列已发送，但 nginx 仍可直连";
+            case "close-sent":
+                return "📤 " + name + "：关门序列已发送";
             default:
                 return "⚠️ " + name + "：未知结果";
         }
     }
 
     function finishSummary() {
-        const hasUnverified = results.some(function (result) {
-            return result.state === "open-unverified" || result.state === "close-unverified";
-        });
-        const changed = results.some(function (result) {
-            return result.state === "opened" || result.state === "closed";
+        const sent = results.some(function (result) {
+            return result.state === "open-sent" || result.state === "close-sent";
         });
         const allAlreadyConnected = action === "open" && results.every(function (result) {
             return result.state === "already-connected";
         });
 
         let title;
-        if (hasUnverified) {
-            title = "VPS " + actionLabel + "结果未完全确认";
+        if (sent) {
+            title = "VPS " + actionLabel + "序列已发送";
         } else if (allAlreadyConnected) {
             title = "VPS 已经连通";
-        } else if (changed) {
-            title = action === "open" ? "VPS 敲门成功" : "VPS 关门成功";
         } else {
             title = "VPS " + actionLabel + "检查完成";
         }
 
+        const followUp = sent
+            ? ["请稍等 1–2 秒后再次刷新该面板验证结果"]
+            : [];
         finish(
             title,
             [currentNetworkLabel()]
                 .concat(results.map(resultLine))
+                .concat(followUp)
                 .concat(["检测：DIRECT HEAD nginx:" + checkPort])
                 .join("\n"),
-            hasUnverified ? "alert" : "good"
+            sent ? "info" : "good"
         );
     }
 
-    processTarget(0);
+    probeTargets(0, []);
 })();
