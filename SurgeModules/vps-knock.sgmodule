@@ -1,12 +1,12 @@
 #!name=VPS Knockd 控制
-#!desc=通过当前网络直连 VPS，手动发送 knockd 开门或关门序列。网络切换后请重新执行开门；关门只影响当前出口 IP，旧出口规则应由 VPS 端 cmd_timeout 自动回收。
-#!arguments=vps_names:VPS-1|VPS-2,vps_hosts:vps1.example.com|vps2.example.com,open_ports:7123|8234|9345,close_ports:9345|8234|7123
-#!arguments-desc=名称、主机和端口列表使用竖线 | 分隔。主机请填写域名、IPv4 或 IPv6 地址，不要包含协议、端口或路径。所有 VPS 共用同一套端口序列。
+#!desc=先从当前网络 DIRECT 探测 VPS 的 nginx；未连通时才发送 knockd 序列，并再次直连检测结果。关门只影响当前出口 IP，旧出口规则应由 VPS 端 cmd_timeout 自动回收。
+#!arguments=vps_names:VPS-1|VPS-2,vps_hosts:vps1.example.com|vps2.example.com,open_ports:7123|8234|9345,close_ports:9345|8234|7123,check_port:80
+#!arguments-desc=名称和主机列表使用竖线 | 分隔。check_port 填写受 knockd 规则保护的 nginx 端口，推荐 80；填写 443 时主机名应与 HTTPS 证书匹配。
 
 [Script]
-VPS-Knock-Open = type=generic,timeout=60,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=open&names={{{vps_names}}}&hosts={{{vps_hosts}}}&open={{{open_ports}}}&close={{{close_ports}}}"
-VPS-Knock-Close = type=generic,timeout=60,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=close&names={{{vps_names}}}&hosts={{{vps_hosts}}}&open={{{open_ports}}}&close={{{close_ports}}}"
+VPS-Knock-Open = type=generic,timeout=120,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=open&names={{{vps_names}}}&hosts={{{vps_hosts}}}&open={{{open_ports}}}&close={{{close_ports}}}&check_port={{{check_port}}}"
+VPS-Knock-Close = type=generic,timeout=120,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=close&names={{{vps_names}}}&hosts={{{vps_hosts}}}&open={{{open_ports}}}&close={{{close_ports}}}&check_port={{{check_port}}}"
 
 [Panel]
-VPS-Knock-Open = title="🔓 VPS 开门（当前出口）",content="网络切换后，点击刷新按钮发送开门序列",style=info,script-name=VPS-Knock-Open
-VPS-Knock-Close = title="🔒 VPS 关门（当前出口）",content="离开当前网络前，点击刷新按钮发送关门序列",style=info,script-name=VPS-Knock-Close
+VPS-Knock-Open = title="🔓 VPS 开门（当前出口）",content="点击刷新：已连通则跳过，未连通才发送开门序列",style=info,script-name=VPS-Knock-Open
+VPS-Knock-Close = title="🔒 VPS 关门（当前出口）",content="点击刷新：先检测连通性，再发送关门序列并复检",style=info,script-name=VPS-Knock-Close
