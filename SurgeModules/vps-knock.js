@@ -3,8 +3,9 @@
 (function () {
     "use strict";
 
-    const KNOCK_REQUEST_TIMEOUT_SECONDS = 1;
-    const KNOCK_GAP_MILLISECONDS = 150;
+    // 必须短于常见的首次 TCP SYN 重传窗口，避免同一敲门端口被重复命中。
+    const KNOCK_REQUEST_TIMEOUT_SECONDS = 0.2;
+    const KNOCK_GAP_MILLISECONDS = 100;
     const PROBE_TIMEOUT_SECONDS = 3;
     const POST_KNOCK_SETTLE_MILLISECONDS = 500;
     const PROBE_RETRY_DELAY_MILLISECONDS = 1000;
@@ -160,11 +161,13 @@
             throw new Error("至少需要配置一个 VPS 地址");
         }
 
-        targetPorts = parsePorts(
-            action === "open" ? args.open : args.close,
-            action === "open" ? "开门端口" : "关门端口"
-        );
+        const openPorts = parsePorts(args.open, "开门端口");
+        const closePorts = parsePorts(args.close, "关门端口");
+        targetPorts = action === "open" ? openPorts : closePorts;
         checkPort = parseCheckPort(args.check_port || "80");
+        if (openPorts.indexOf(checkPort) >= 0 || closePorts.indexOf(checkPort) >= 0) {
+            throw new Error("nginx 检测端口不能同时出现在敲门序列中: " + checkPort);
+        }
         targets = hosts.map(function (host, index) {
             return {
                 host: host,
@@ -194,9 +197,6 @@
                 url: url,
                 timeout: PROBE_TIMEOUT_SECONDS,
                 policy: "DIRECT",
-                headers: checkPort === 80
-                    ? {"Cache-Control": "no-cache", "Connection": "close"}
-                    : {"Cache-Control": "no-cache"},
                 "auto-redirect": false,
                 "auto-cookie": false
             }, function (error, response) {
@@ -249,10 +249,12 @@
         }
 
         try {
-            $httpClient.get({
+            $httpClient.head({
                 url: url,
                 timeout: KNOCK_REQUEST_TIMEOUT_SECONDS,
-                policy: "DIRECT"
+                policy: "DIRECT",
+                "auto-redirect": false,
+                "auto-cookie": false
             }, function (error) {
                 continueSequence(error);
             });
