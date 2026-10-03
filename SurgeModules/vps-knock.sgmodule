@@ -1,12 +1,16 @@
-#!name=VPS Knockd 控制
-#!desc=先从当前网络 DIRECT 探测 VPS 的 nginx；需要操作时快速发送 knockd 序列并立即结束，避免 TCP SYN 重传打乱顺序。等待 1–2 秒后再次刷新即可验证。关门只影响当前出口 IP，旧出口规则应由 VPS 端 cmd_timeout 自动回收。
-#!arguments=vps_names:VPS-1|VPS-2,vps_hosts:vps1.example.com|vps2.example.com,open_ports:7123|8234|9345,close_ports:9345|8234|7123,check_port:80
-#!arguments-desc=名称和主机列表使用竖线 | 分隔。每组敲门序列最多 5 个端口。check_port 填写受 knockd 规则保护的 nginx 端口，推荐 80；填写 443 时主机名应与 HTTPS 证书匹配。
+#!name=VPS Knockd 独立控制
+#!desc=每台 VPS 使用独立的开门、关门面板卡片。点击卡片时只向对应 VPS 发送对应序列；不探测、不联动其他 VPS、不自动判断结果。
+#!arguments=vps1_name:VPS-1,vps1_host:vps1.example.com,vps1_open_ports:7123|8234|9345,vps1_close_ports:9345|8234|7123,vps2_name:VPS-2,vps2_host:vps2.example.com,vps2_open_ports:7123|8234|9345,vps2_close_ports:9345|8234|7123
+#!arguments-desc=每台 VPS 分别配置名称、地址、开门序列和关门序列；序列使用竖线 | 分隔且最多 5 个端口。地址填写域名、IPv4 或 IPv6，不要包含协议、端口或路径。
 
 [Script]
-VPS-Knock-Open = type=generic,timeout=120,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=open&names={{{vps_names}}}&hosts={{{vps_hosts}}}&open={{{open_ports}}}&close={{{close_ports}}}&check_port={{{check_port}}}"
-VPS-Knock-Close = type=generic,timeout=120,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=close&names={{{vps_names}}}&hosts={{{vps_hosts}}}&open={{{open_ports}}}&close={{{close_ports}}}&check_port={{{check_port}}}"
+VPS-1-Knock-Open = type=generic,timeout=10,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=open&name={{{vps1_name}}}&host={{{vps1_host}}}&open={{{vps1_open_ports}}}&close={{{vps1_close_ports}}}"
+VPS-1-Knock-Close = type=generic,timeout=10,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=close&name={{{vps1_name}}}&host={{{vps1_host}}}&open={{{vps1_open_ports}}}&close={{{vps1_close_ports}}}"
+VPS-2-Knock-Open = type=generic,timeout=10,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=open&name={{{vps2_name}}}&host={{{vps2_host}}}&open={{{vps2_open_ports}}}&close={{{vps2_close_ports}}}"
+VPS-2-Knock-Close = type=generic,timeout=10,script-path=https://raw.githubusercontent.com/ccolr/zsh.ee/main/SurgeModules/vps-knock.js,argument="action=close&name={{{vps2_name}}}&host={{{vps2_host}}}&open={{{vps2_open_ports}}}&close={{{vps2_close_ports}}}"
 
 [Panel]
-VPS-Knock-Open = title="🔓 VPS 开门（当前出口）",content="点击刷新：已连通则跳过，否则发送开门序列；等待 1–2 秒后再次刷新验证",style=info,script-name=VPS-Knock-Open
-VPS-Knock-Close = title="🔒 VPS 关门（当前出口）",content="点击刷新：先检测连通性，再发送关门序列；等待 1–2 秒后再次刷新验证",style=info,script-name=VPS-Knock-Close
+VPS-1-Knock-Open = title="🔓 {{{vps1_name}}} 开门",content="点击刷新：只发送该 VPS 的开门序列",style=info,script-name=VPS-1-Knock-Open
+VPS-1-Knock-Close = title="🔒 {{{vps1_name}}} 关门",content="点击刷新：只发送该 VPS 的关门序列",style=info,script-name=VPS-1-Knock-Close
+VPS-2-Knock-Open = title="🔓 {{{vps2_name}}} 开门",content="点击刷新：只发送该 VPS 的开门序列",style=info,script-name=VPS-2-Knock-Open
+VPS-2-Knock-Close = title="🔒 {{{vps2_name}}} 关门",content="点击刷新：只发送该 VPS 的关门序列",style=info,script-name=VPS-2-Knock-Close

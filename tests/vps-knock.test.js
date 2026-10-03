@@ -6,7 +6,9 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const scriptPath = path.join(__dirname, "..", "SurgeModules", "vps-knock.js");
+const modulePath = path.join(__dirname, "..", "SurgeModules", "vps-knock.sgmodule");
 const scriptSource = fs.readFileSync(scriptPath, "utf8");
+const moduleSource = fs.readFileSync(modulePath, "utf8");
 
 function createClock() {
     let now = 0;
@@ -14,13 +16,11 @@ function createClock() {
     const queue = [];
 
     function setTimeout(callback, delay) {
-        const item = {
+        queue.push({
             id: nextId++,
             at: now + Number(delay || 0),
             callback: callback
-        };
-        queue.push(item);
-        return item.id;
+        });
     }
 
     function runUntil(predicate, limit) {
@@ -50,10 +50,8 @@ function createKnockd(openPorts, closePorts) {
         {name: "close", ports: closePorts, completed: 0}
     ];
     let attempts = [];
-    const packets = [];
 
-    function receive(port, at) {
-        packets.push({port: port, at: at});
+    function receive(port) {
         attempts = attempts.filter(function (attempt) {
             return attempt.stage >= 0 && attempt.stage < attempt.door.ports.length;
         });
@@ -75,60 +73,54 @@ function createKnockd(openPorts, closePorts) {
         doors.forEach(function (door) {
             if (door.ports[0] === port) {
                 attempts.push({door: door, stage: 1});
-                if (door.ports.length === 1) {
-                    door.completed += 1;
-                }
             }
         });
     }
 
     return {
         receive: receive,
-        packets: packets,
         completed: function (name) {
             return doors.find(function (door) { return door.name === name; }).completed;
         }
     };
 }
 
-function runScript() {
+function runScript(options) {
     const openPorts = [7123, 8234, 9345];
     const closePorts = openPorts.slice().reverse();
     const clock = createClock();
     const knockd = createKnockd(openPorts, closePorts);
+    const requests = [];
     let doneResult = null;
     let doneAt = null;
     let firstKnockAt = null;
 
-    function request(options, callback) {
-        const port = Number(new URL(options.url).port || 80);
-        if (port === 80) {
-            clock.setTimeout(function () {
-                callback("The request timed out", null);
-            }, 3000);
-            return;
-        }
-
+    function request(requestOptions, callback) {
+        const url = new URL(requestOptions.url);
+        const port = Number(url.port);
         if (firstKnockAt === null) firstKnockAt = clock.now();
-        knockd.receive(port, clock.now());
+        requests.push({hostname: url.hostname, port: port, at: clock.now()});
+        knockd.receive(port);
 
-        // A silently dropped TCP connection retransmits SYN packets even when
-        // the HTTP API has already reported its sub-second timeout.
         [1000, 3000, 7000].forEach(function (delay) {
             clock.setTimeout(function () {
-                if (doneResult === null) knockd.receive(port, clock.now());
+                if (doneResult === null) knockd.receive(port);
             }, delay);
         });
-
-        // Model Surge's observed behaviour: a fractional timeout does not make
-        // the underlying connection disappear before the first SYN retry.
         clock.setTimeout(function () {
             callback("The request timed out", null);
-        }, Math.max(1000, Number(options.timeout || 5) * 1000));
+        }, 1000);
     }
 
+    const argument = [
+        "action=" + options.action,
+        "name=" + options.name,
+        "host=" + options.host,
+        "open=" + openPorts.join("|"),
+        "close=" + closePorts.join("|")
+    ].join("&");
     const context = {
-        $argument: "action=open&names=test&hosts=203.0.113.10&open=7123|8234|9345&close=9345|8234|7123&check_port=80",
+        $argument: argument,
         $trigger: "button",
         $network: {v4: {primaryInterface: "en0"}},
         $httpClient: {head: request},
@@ -137,28 +129,51 @@ function runScript() {
             doneAt = clock.now();
         },
         console: {log: function () {}},
-        Date: {now: function () { return clock.now(); }},
-        URL: URL,
         setTimeout: clock.setTimeout
     };
 
     vm.runInNewContext(scriptSource, context, {filename: scriptPath});
-    clock.runUntil(function () { return doneResult !== null; }, 30000);
+    clock.runUntil(function () { return doneResult !== null; }, 5000);
 
     return {
         doneAt: doneAt,
         firstKnockAt: firstKnockAt,
         knockd: knockd,
+        requests: requests,
         result: doneResult
     };
 }
 
-const run = runScript();
-assert.equal(run.knockd.completed("open"), 1, "one clean open sequence should complete");
-assert.ok(
-    run.doneAt - run.firstKnockAt < 1000,
-    "the script must end before the first TCP SYN retransmission"
+const firstVps = runScript({
+    action: "open",
+    name: "VPS-1",
+    host: "203.0.113.10"
+});
+assert.equal(firstVps.knockd.completed("open"), 1);
+assert.deepEqual(firstVps.requests.map(function (request) { return request.port; }), [7123, 8234, 9345]);
+assert.deepEqual(
+    Array.from(new Set(firstVps.requests.map(function (request) { return request.hostname; }))),
+    ["203.0.113.10"]
 );
-assert.match(run.result.content, /再次刷新.*验证/);
+assert.ok(firstVps.doneAt - firstVps.firstKnockAt < 1000);
+assert.match(firstVps.result.content, /结果由你人工判断/);
 
-console.log("vps-knock regression test passed");
+const secondVps = runScript({
+    action: "close",
+    name: "VPS-2",
+    host: "198.51.100.20"
+});
+assert.equal(secondVps.knockd.completed("close"), 1);
+assert.deepEqual(secondVps.requests.map(function (request) { return request.port; }), [9345, 8234, 7123]);
+assert.deepEqual(
+    Array.from(new Set(secondVps.requests.map(function (request) { return request.hostname; }))),
+    ["198.51.100.20"]
+);
+
+assert.match(moduleSource, /VPS-1-Knock-Open/);
+assert.match(moduleSource, /VPS-1-Knock-Close/);
+assert.match(moduleSource, /VPS-2-Knock-Open/);
+assert.match(moduleSource, /VPS-2-Knock-Close/);
+assert.doesNotMatch(moduleSource, /vps_names|vps_hosts|check_port/);
+
+console.log("vps-knock independent-panel regression tests passed");
