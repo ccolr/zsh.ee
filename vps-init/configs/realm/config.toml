@@ -1,0 +1,16 @@
+[log]
+level = "info"
+output = "stdout"
+
+[network]
+no_tcp = false
+use_udp = true
+
+[[endpoints]]
+listen = "0.0.0.0:8443"
+remote = "1.2.3.4:443" # 可以写域名
+
+# 可以监听多个端口, 发送到不同远端
+# [[endpoints]]
+# listen = "0.0.0.0:8443"
+# remote = "1.2.3.4:443"

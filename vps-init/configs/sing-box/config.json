@@ -1,0 +1,74 @@
+{
+    "log": {
+        "disabled": false,
+        "level": "warn",
+        "output": "/var/log/sing-box/sing-box.log",
+        "timestamp": true
+    },
+    "dns": {
+        "servers": [
+            {
+                "type": "local",
+                "tag": "local"
+            }
+        ],
+        "final": "local"
+    },
+    "inbounds": [
+        {
+            "type": "anytls",
+            "listen": "0.0.0.0",
+            "listen_port": 8443,
+            "users": [
+                {
+                    "name": "otmno",
+                    "password": "52feeb206c6bd7e16abca862d644405baa5e1bc44a9bb9ff7a71f6594b66fe2a"
+                }
+            ],
+            "tls": {
+                "enabled": true,
+                "server_name": "star.eva.cm",
+                "certificate_path": "/etc/nginx/ssl/star.eva.cm/fullchain.crt",
+                "key_path": "/etc/nginx/ssl/star.eva.cm/cert.key"
+            },
+            "tag": "anytls-in"
+        }
+    ],
+    "outbounds": [
+        {
+            "type": "direct",
+            "tag": "direct-out",
+            "domain_resolver": "local"
+        }
+    ],
+    "route": {
+        "rules": [
+            {
+                "inbound": "anytls-in",
+                "network": "udp",
+                "port": 443,
+                "action": "reject"
+            },
+            {
+                "inbound": "anytls-in",
+                "ip_is_private": true,
+                "action": "reject"
+            },
+            {
+                "inbound": "anytls-in",
+                "port": [
+                    25,
+                    465,
+                    587,
+                    2525
+                ],
+                "action": "reject"
+            },
+            {
+                "inbound": "anytls-in",
+                "outbound": "direct-out"
+            }
+        ],
+        "final": "direct-out"
+    }
+}
