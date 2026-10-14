@@ -4,15 +4,23 @@
 
 ## 使用
 
+远程执行：
+
+```bash
+curl -fsSL https://zsh.ee/vps-init/main-init.sh | sudo sh
+```
+
+本地执行：
+
 ```bash
 cd vps-init
-sudo bash main-init.sh
+sudo sh main-init.sh
 ```
 
 也可以直接传入菜单编号：
 
 ```bash
-sudo bash main-init.sh 3
+sudo sh main-init.sh 3
 ```
 
 编号 `12` 会按菜单顺序执行全部模块。Nginx 模块执行时会询问域名，该域名只用于生成 `/etc/nginx/conf.d/<domain>.conf` 的文件名；文件正文保留 `vps.md` 中的固定域名和路径。

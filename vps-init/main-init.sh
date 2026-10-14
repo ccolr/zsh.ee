@@ -1,77 +1,49 @@
-#!/usr/bin/env bash
-set -Eeuo pipefail
+#!/bin/sh
+set -eu
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_BASE_URL="https://zsh.ee/vps-init"
+BASE_URL="${VPS_INIT_BASE_URL:-${DEFAULT_BASE_URL}}"
 
-MODULES=(
-  locale-init.sh
-  ufw-init.sh
-  nginx-init.sh
-  certificate-init.sh
-  realm-init.sh
-  xray-init.sh
-  sing-box-init.sh
-  nvim-init.sh
-  starship-init.sh
-  fzf-init.sh
-  env-init.sh
-)
-
-show_menu() {
-  cat <<'EOF'
-VPS 初始化菜单
-
-  1) locale
-  2) ufw
-  3) nginx
-  4) certificate / acme.sh
-  5) realm
-  6) xray
-  7) sing-box
-  8) nvim / lazy.nvim
-  9) starship
- 10) fzf
- 11) TERM_PROGRAM 环境传递
- 12) 执行全部
-EOF
-}
-
-run_module() {
-  local module="$1"
-  printf '\n==> %s\n' "${module%.sh}"
-  bash "${SCRIPT_DIR}/${module}"
-}
-
-run_all() {
-  if [[ "${EUID}" -ne 0 ]]; then
-    printf '执行全部模块需要 root 权限。\n' >&2
-    exit 1
-  fi
-
-  apt-get update
-  export VPS_INIT_APT_UPDATED=1
-
-  local module
-  for module in "${MODULES[@]}"; do
-    run_module "${module}"
-  done
-}
-
-show_menu
-choice="${1:-}"
-if [[ -z "${choice}" ]]; then
-  read -r -p '请输入编号: ' choice
+script_dir=""
+if [ -f "$0" ]; then
+  script_dir=$(CDPATH= cd "$(dirname "$0")" 2>/dev/null && pwd || true)
+fi
+if [ -n "${script_dir}" ] && [ -f "${script_dir}/runner-init.sh" ]; then
+  exec bash "${script_dir}/runner-init.sh" "$@"
 fi
 
-case "${choice}" in
-  1|2|3|4|5|6|7|8|9|10|11)
-    run_module "${MODULES[$((choice - 1))]}"
-    ;;
-  12)
-    run_all
-    ;;
-  *)
-    printf '无效编号: %s\n' "${choice}" >&2
-    exit 1
-    ;;
-esac
+if ! command -v curl >/dev/null 2>&1; then
+  printf '缺少 curl，无法下载 VPS 初始化包。\n' >&2
+  exit 1
+fi
+
+if ! command -v tar >/dev/null 2>&1; then
+  printf '缺少 tar，无法解压 VPS 初始化包。\n' >&2
+  exit 1
+fi
+
+tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/vps-init.XXXXXX")
+cleanup() {
+  if [ -n "${tmp_dir:-}" ] && [ -d "${tmp_dir}" ]; then
+    rm -rf -- "${tmp_dir}"
+  fi
+}
+trap cleanup EXIT HUP INT TERM
+
+archive="${tmp_dir}/vps-init.tar.gz"
+curl -fsSL "${BASE_URL%/}/vps-init.tar.gz" -o "${archive}"
+tar -xzf "${archive}" -C "${tmp_dir}"
+
+runner="${tmp_dir}/vps-init/runner-init.sh"
+if [ ! -f "${runner}" ]; then
+  printf '初始化包中缺少 runner-init.sh。\n' >&2
+  exit 1
+fi
+
+status=0
+if [ -r /dev/tty ] && (: </dev/tty) 2>/dev/null; then
+  bash "${runner}" "$@" </dev/tty || status=$?
+else
+  bash "${runner}" "$@" || status=$?
+fi
+exit "${status}"
