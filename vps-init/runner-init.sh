@@ -15,6 +15,7 @@ MODULES=(
   starship-init.sh
   fzf-init.sh
   env-init.sh
+  ssh-init.sh
 )
 
 show_menu() {
@@ -32,7 +33,8 @@ VPS 初始化菜单
   9) starship
  10) fzf
  11) TERM_PROGRAM 环境传递
- 12) 执行全部
+ 12) SSH
+ 13) 执行全部
 EOF
 }
 
@@ -64,10 +66,10 @@ if [[ -z "${choice}" ]]; then
 fi
 
 case "${choice}" in
-  1|2|3|4|5|6|7|8|9|10|11)
+  1|2|3|4|5|6|7|8|9|10|11|12)
     run_module "${MODULES[$((choice - 1))]}"
     ;;
-  12)
+  13)
     run_all
     ;;
   *)

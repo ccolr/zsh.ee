@@ -11,7 +11,7 @@ curl -fsSL https://zsh.ee/vps-init/main-init.sh | sudo sh
 传入编号可以跳过菜单。例如执行全部模块：
 
 ```bash
-curl -fsSL https://zsh.ee/vps-init/main-init.sh | sudo sh -s -- 12
+curl -fsSL https://zsh.ee/vps-init/main-init.sh | sudo sh -s -- 13
 ```
 
 `main-init.sh` 是 POSIX sh 引导脚本。它会下载 `vps-init.tar.gz`、解压到临时目录，再使用 Bash 执行菜单程序。交互输入从 `/dev/tty` 读取，因此通过管道运行时仍可选择模块并输入 Nginx 域名。
