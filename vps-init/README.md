@@ -34,7 +34,7 @@ sudo sh main-init.sh 3
 | 3 | nginx | 安装并启动 Nginx，复制两个配置文件，不重新加载配置 |
 | 4 | certificate | 安装 cron 与 acme.sh，把两个证书脚本放入 `/root` |
 | 5 | realm | 配置转发与 BBR，安装二进制、配置和 systemd 单元，不启用服务 |
-| 6 | xray | 安装 beta 版并复制服务端配置，不重新加载服务 |
+| 6 | xray | 安装稳定版并复制服务端配置，不重新加载服务 |
 | 7 | sing-box | 安装并复制服务端配置，建立日志文件及权限，不重新加载服务 |
 | 8 | nvim | 安装 Neovim，复制 lazy.nvim 配置并同步插件 |
 | 9 | starship | 安装 Starship，复制四套主题并写入当前用户 `.bashrc` |

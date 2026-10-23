@@ -8,12 +8,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 require_root
 apt_install ca-certificates curl
 
-tmp_dir="$(mktemp -d)"
-trap 'rm -rf -- "${tmp_dir}"' EXIT
-curl -fsSL \
-  https://github.com/XTLS/Xray-install/raw/main/install-release.sh \
-  -o "${tmp_dir}/install-release.sh"
-bash "${tmp_dir}/install-release.sh" install --beta
+bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
 
 install_config "${CONFIG_DIR}/xray/config.json" /usr/local/etc/xray/config.json
 
