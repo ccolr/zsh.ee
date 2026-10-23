@@ -1,0 +1,29 @@
+# /etc/fail2ban/jail.local
+
+[DEFAULT]
+# 永远不封禁本机
+# 如需加入办公网固定 IP，可追加：203.0.113.10 192.168.1.0/24
+ignoreip = 127.0.0.1/8 ::1 47.180.25.62/32 68.68.248.70/32 186.241.86.42/32 38.14.195.148/32
+ignoreself = true
+
+# 10 分钟内失败 5 次，初次封禁 1 小时
+findtime = 10m
+maxretry = 5
+bantime  = 1h
+
+# 重复违规时逐步延长封禁时间，最长 7 天
+bantime.increment = true
+bantime.factor    = 2
+bantime.maxtime   = 7d
+
+# 避免对日志中的主机名进行 DNS 解析
+usedns = no
+
+
+# SSH 防护
+[sshd]
+enabled  = true
+port     = __SSH_PORT__
+backend  = systemd
+mode     = normal
+maxretry = 5

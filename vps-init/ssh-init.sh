@@ -6,8 +6,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
 require_root
+apt_install fail2ban
 
-target_file=/etc/ssh/sshd_config.d/00_custom.conf
+ssh_target_file=/etc/ssh/sshd_config.d/00_custom.conf
+fail2ban_target_file=/etc/fail2ban/jail.local
 
 port_is_valid() {
   local port="$1"
@@ -31,21 +33,26 @@ generate_port() {
 }
 
 ssh_port=""
-if [[ -f "${target_file}" ]]; then
-  ssh_port="$(awk '$1 == "Port" && $2 ~ /^[0-9]+$/ { print $2; exit }' "${target_file}")"
+if [[ -f "${ssh_target_file}" ]]; then
+  ssh_port="$(awk '$1 == "Port" && $2 ~ /^[0-9]+$/ { print $2; exit }' "${ssh_target_file}")"
 fi
 
 if ! port_is_valid "${ssh_port}"; then
   ssh_port="$(generate_port)"
 fi
 
-tmp_file="$(mktemp)"
-trap 'rm -f -- "${tmp_file}"' EXIT
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf -- "${tmp_dir}"' EXIT
+
 sed "s/__SSH_PORT__/${ssh_port}/" \
-  "${CONFIG_DIR}/ssh/00_custom.conf" > "${tmp_file}"
+  "${CONFIG_DIR}/ssh/00_custom.conf" > "${tmp_dir}/00_custom.conf"
+sed "s/__SSH_PORT__/${ssh_port}/" \
+  "${CONFIG_DIR}/ssh/jail.local" > "${tmp_dir}/jail.local"
 
 install -d -m 0755 /etc/ssh/sshd_config.d
-install_config "${tmp_file}" "${target_file}" 0644
+install_config "${tmp_dir}/00_custom.conf" "${ssh_target_file}" 0644
+install -d -m 0755 /etc/fail2ban
+install_config "${tmp_dir}/jail.local" "${fail2ban_target_file}" 0644
 
 if command -v sshd >/dev/null 2>&1; then
   sshd -t
@@ -56,6 +63,9 @@ else
   exit 1
 fi
 
-log "SSH 配置已写入 ${target_file}"
+fail2ban-client -t
+
+log "SSH 配置已写入 ${ssh_target_file}"
 log "SSH 端口: ${ssh_port}"
+log "Fail2ban 配置已写入 ${fail2ban_target_file}"
 log 'SSH 服务未重新加载'

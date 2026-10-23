@@ -40,6 +40,6 @@ sudo sh main-init.sh 3
 | 9 | starship | 安装 Starship，复制四套主题并写入当前用户 `.bashrc` |
 | 10 | fzf | 安装 fzf、fd、bat、tree，安装四套 Catppuccin bat 主题，并根据 `TERM_PROGRAM` 设置 bat 主题 |
 | 11 | env | 配置 sudo 与 su 传递 `TERM_PROGRAM` |
-| 12 | ssh | 写入 `00_custom.conf`，生成不含 1、4、7 的随机高位端口，不重新加载 SSH |
+| 12 | ssh | 写入 `00_custom.conf`，生成不含 1、4、7 的随机高位端口；安装并配置 Fail2ban 使用相同端口，不重新加载 SSH |
 
 需要用户配置的域名、UUID、密钥、证书路径、Cloudflare 变量和 Realm 目标地址均原样保留在模板中。网页目录和客户端代理配置不在此目录的范围内。
