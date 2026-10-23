@@ -7,10 +7,10 @@ no_tcp = false
 use_udp = true
 
 [[endpoints]]
-listen = "0.0.0.0:8443"
-remote = "1.2.3.4:443" # 可以写域名
+listen = "0.0.0.0:3443"
+remote = "<host name>:443"
 
 # 可以监听多个端口, 发送到不同远端
 # [[endpoints]]
-# listen = "0.0.0.0:8443"
-# remote = "1.2.3.4:443"
+# listen = "0.0.0.0:4443"
+# remote = "<host name>:8443"

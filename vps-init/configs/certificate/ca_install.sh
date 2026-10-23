@@ -2,9 +2,8 @@
 set -euo pipefail
 
 /root/.acme.sh/acme.sh --install-cert \
-  -d eva.cm \
-  -d www.eva.cm \
+  -d <your domain> \
   --ecc \
-  --cert-file '/etc/nginx/ssl/<your domain>/cert.crt' \
-  --key-file '/etc/nginx/ssl/<your domain>/cert.key' \
-  --fullchain-file '/etc/nginx/ssl/<your domain>/fullchain.crt'
+  --cert-file '/etc/nginx/ssl/<your main domain>/cert.crt' \
+  --key-file '/etc/nginx/ssl/<your main domain>/cert.key' \
+  --fullchain-file '/etc/nginx/ssl/<your main domain>/fullchain.crt'

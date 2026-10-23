@@ -7,7 +7,6 @@ set -euo pipefail
 /root/.acme.sh/acme.sh --issue \
     --server letsencrypt \
     --dns dns_cf \
-    -d eva.cm \
-    -d www.eva.cm \
+    -d <your domain> \
     --keylength ec-256 \
     --force

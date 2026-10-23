@@ -38,7 +38,7 @@
             "settings": {
                 "users": [
                     {
-                        "id": "90132323-3743-4f3f-abb5-3bc903769031",
+                        "id": "<your uuid>",
                         "level": 0,
                         "email": "i@eva.cm",
                         "flow": "xtls-rprx-vision"
@@ -53,12 +53,12 @@
                 "realitySettings": {
                     "target": "127.0.0.1:10443",
                     "serverNames": [
-                        "star.eva.cm"
+                        "<your domain>"
                     ],
-                    "privateKey": "kLy_km742G06Doljc1TOweLMRoEv04N9PEVO0mdam3I",
+                    "privateKey": "<your private key>",
                     "shortIds": [
-                        "447b975cb26bc209",
-                        "a5bb56942d606610"
+                        "<your short id>",
+                        "<your short id>"
                     ]
                 }
             },

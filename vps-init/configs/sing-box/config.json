@@ -22,14 +22,14 @@
             "users": [
                 {
                     "name": "otmno",
-                    "password": "52feeb206c6bd7e16abca862d644405baa5e1bc44a9bb9ff7a71f6594b66fe2a"
+                    "password": "<password>"
                 }
             ],
             "tls": {
                 "enabled": true,
-                "server_name": "star.eva.cm",
-                "certificate_path": "/etc/nginx/ssl/star.eva.cm/fullchain.crt",
-                "key_path": "/etc/nginx/ssl/star.eva.cm/cert.key"
+                "server_name": "<your main domain>",
+                "certificate_path": "/etc/nginx/ssl/<your main domain>/fullchain.crt",
+                "key_path": "/etc/nginx/ssl/<your main domain>/cert.key"
             },
             "tag": "anytls-in"
         }
