@@ -38,7 +38,7 @@ sudo sh main-init.sh 3
 | 7 | sing-box | 安装并复制服务端配置，建立日志文件及权限，不重新加载服务 |
 | 8 | nvim | 安装 Neovim，复制 lazy.nvim 配置并同步插件 |
 | 9 | starship | 安装 Starship，复制四套主题并写入当前用户 `.bashrc` |
-| 10 | fzf | 安装 fzf、fd、bat、tree，并写入当前用户 shell 配置 |
+| 10 | fzf | 安装 fzf、fd、bat、tree，安装四套 Catppuccin bat 主题，并根据 `TERM_PROGRAM` 设置 bat 主题 |
 | 11 | env | 配置 sudo 与 su 传递 `TERM_PROGRAM` |
 | 12 | ssh | 写入 `00_custom.conf`，生成不含 1、4、7 的随机高位端口，不重新加载 SSH |
 
